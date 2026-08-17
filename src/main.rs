@@ -5,14 +5,14 @@ use std::io::Read;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use slint_keyos_platform::app_ui;
+use slint_keyos_platform::app_ui2;
 use slint_keyos_platform::fs::{self, Location, OpenFlags};
 use slint_keyos_platform::qrcode;
 use slint_keyos_platform::slint::{Color, ComponentHandle, Image, ModelRc, Timer, VecModel};
 use wallet_core::backup::GiftRecord;
 use wallet_core::{bill, derive, keys, qr, template, Variant};
 
-app_ui!("prime-paper-wallet");
+app_ui2!("Paper Wallet");
 security::use_api!();
 
 /// Hidden app-private metadata store on Internal (User) storage — kept out
