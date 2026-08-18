@@ -719,12 +719,53 @@ fn contract_5_mutation_dual_kind_edge_counts_as_reachable() {
 
 // ---- wrapper: run the REAL cargo metadata against the REAL device target ----
 
+/// Locate a `nix` executable without assuming the ambient shell has already
+/// sourced the multi-user daemon's profile script (workspace CLAUDE.md,
+/// "Environment / toolchain": a non-login shell needs
+/// `. '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'` first).
+/// Tries PATH, then the standard multi-user install location.
+fn nix_binary() -> String {
+    if std::process::Command::new("nix").arg("--version").output().is_ok_and(|o| o.status.success()) {
+        return "nix".to_string();
+    }
+    const FALLBACK: &str = "/nix/var/nix/profiles/default/bin/nix";
+    if Path::new(FALLBACK).exists() {
+        return FALLBACK.to_string();
+    }
+    panic!(
+        "no `nix` executable found on PATH or at {FALLBACK} — the device-target dependency \
+         graph check needs the Foundation SDK's Nix shell, which needs Nix itself"
+    );
+}
+
 #[test]
 fn contract_5_real_graph_reaches_only_the_vendored_getrandom_on_device() {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let manifest = root_cargo_toml();
-    let output = std::process::Command::new(&cargo)
+    // `--filter-platform` makes cargo ask rustc to evaluate this target's
+    // `cfg()`s. `armv7a-unknown-xous-elf` is a KeyOS target patched into the
+    // Foundation SDK's Nix-provided nightly rustc (`foundation doctor`'s
+    // "KeyOS target" check); the standalone rustup toolchain plain `cargo
+    // test -p wallet-core` runs under has no idea it exists at all
+    // (`rustc --print target-list` has no such entry there). Even inside
+    // the SDK's Nix shell, resolving this target additionally requires
+    // `-Zunstable-options` (that nightly rustc treats it as a "custom"
+    // target) — verified against `foundation`'s own embedded RUSTFLAGS for
+    // real hardware builds, which carries the same flag. So this one
+    // metadata call is routed through `nix develop <sdk root> --command
+    // cargo metadata ...` with `-Zunstable-options` scoped to its own
+    // RUSTFLAGS, rather than exporting that flag for real builds (which
+    // `foundation` already does on its own).
+    let sdk_root = std::env::var("FOUNDATION_SDK_ROOT").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        format!("{home}/.foundation/sdk/current")
+    });
+    let nix = nix_binary();
+    let output = std::process::Command::new(&nix)
         .args([
+            "develop",
+            &sdk_root,
+            "--command",
+            "cargo",
             "metadata",
             "--format-version",
             "1",
@@ -734,17 +775,32 @@ fn contract_5_real_graph_reaches_only_the_vendored_getrandom_on_device() {
             "--manifest-path",
         ])
         .arg(&manifest)
+        .env("RUSTFLAGS", "-Zunstable-options")
         .output()
-        .expect("failed to run `cargo metadata` — is this test running inside the SDK's nix shell?");
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to run `{nix} develop {sdk_root} --command cargo metadata` for the device \
+                 target: {e}\n\nThis check needs the Foundation SDK's Nix shell — run `foundation \
+                 doctor` and make sure `nix develop {sdk_root}` works on its own first."
+            )
+        });
 
     assert!(
         output.status.success(),
-        "cargo metadata failed (exit {:?}):\n{}",
+        "`nix develop {sdk_root} --command cargo metadata --filter-platform \
+         armv7a-unknown-xous-elf` failed (exit {:?}):\n{}",
         output.status.code(),
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let metadata: Value = serde_json::from_slice(&output.stdout).expect("cargo metadata stdout must be valid JSON");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // The SDK's Nix flake prints a "Foundation SDK user shell ready."
+    // banner via its shellHook, onto stdout, ahead of the real command's
+    // own output — `nix develop --command` doesn't suppress it. The
+    // metadata document itself always starts with `{`, so trim anything
+    // the shell hook printed before it rather than fighting the hook.
+    let json_start = stdout.find('{').expect("cargo metadata stdout contains no JSON object");
+    let metadata: Value = serde_json::from_str(&stdout[json_start..]).expect("cargo metadata stdout must be valid JSON");
     let root = metadata["resolve"]["root"].as_str().expect("resolve.root must be a string").to_string();
 
     let hits = reachable_getrandom(&metadata, &root);
