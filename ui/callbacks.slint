@@ -18,7 +18,9 @@ export struct FileRow {
 // One bill design in the template picker (row 0 is the built-in satoshi).
 export struct TemplateRow {
     name: string,
-    location: string,     // "built-in", "Internal" or "Airlock"
+    // Sub-label: a shipped design's one-line blurb, or "Internal"/"Airlock"
+    // for a design the user dropped on the device.
+    location: string,
     selected: bool,
 }
 
@@ -103,7 +105,9 @@ export global Templates {
     // Informational line: scan errors, or export-kit confirmation.
     in property <string> status: "";
     // Name shown on the home screen's "Bill design" row.
-    in property <string> selected-name: "Satoshi bill";
+    // Overwritten from Rust on first paint; the default here only has to
+    // match BUILTIN_DESIGNS[0] so the home row is right before any pick.
+    in property <string> selected-name: "Engraved";
 }
 
 export global Detail {

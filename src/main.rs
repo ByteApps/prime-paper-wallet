@@ -46,13 +46,50 @@ struct State {
     /// Save-browser cursor: where "Save here" will write the bill.
     save_location: Location,
     save_path: String,
-    /// Picker scan results (UI row 0 is the implicit built-in satoshi).
+    /// Picker scan results. The shipped designs occupy the first
+    /// `BUILTIN_DESIGNS.len()` rows, so a scanned template at index `i` is
+    /// UI row `i + BUILTIN_DESIGNS.len()`.
     templates: Vec<TemplateChoice>,
-    /// Validated custom design for the next saves: (display name, PNG
-    /// bytes). Bytes are cached at pick time because saving unmounts
-    /// Airlock afterwards — never re-read the path at save time.
-    /// None = built-in satoshi bill.
-    selected_template: Option<(String, Vec<u8>)>,
+    /// Which design the next save renders on.
+    design: Design,
+}
+
+/// The picked bill design. A shipped design is held by reference — its PNG is
+/// static, and copying a quarter-megabyte into the heap to select it would be
+/// waste on a device this size. A user's design has to be owned: its bytes are
+/// cached at pick time because saving unmounts Airlock afterwards, so the path
+/// must never be re-read at save time.
+enum Design {
+    Builtin(&'static template::BuiltinDesign),
+    Custom { name: String, bytes: Vec<u8> },
+}
+
+impl Design {
+    /// Display name for the home row and the picker.
+    fn name(&self) -> &str {
+        match self {
+            Design::Builtin(d) => d.name,
+            Design::Custom { name, .. } => name.as_str(),
+        }
+    }
+
+    /// What `save_gift` needs: `None` composes through the built-in path,
+    /// `Some` through the marker engine.
+    fn as_template(&self) -> Option<(&str, &[u8])> {
+        match self {
+            Design::Builtin(d) => d.as_template().map(|png| (d.name, png)),
+            Design::Custom { name, bytes } => Some((name.as_str(), bytes.as_slice())),
+        }
+    }
+
+    /// `template=` value in the save-bill log line. The default design stays
+    /// "builtin" so the existing log contract still holds.
+    fn log_name(&self) -> &str {
+        match self {
+            Design::Builtin(d) if d.is_default() => "builtin",
+            other => other.name(),
+        }
+    }
 }
 
 fn app_main(cx: AppContext, ui: AppWindow) {
@@ -69,7 +106,7 @@ fn app_main(cx: AppContext, ui: AppWindow) {
         save_location: Location::Airlock,
         save_path: EXPORT_DIR.to_string(),
         templates: Vec::new(),
-        selected_template: None,
+        design: Design::Builtin(template::default_design()),
     }));
 
     if let Err(e) = fs.create_dir(META_DIR, Location::User) {
@@ -444,9 +481,8 @@ fn app_main(cx: AppContext, ui: AppWindow) {
                 };
                 let (result, template_log) = {
                     let s = state.borrow();
-                    let tpl = s.selected_template.as_ref().map(|(n, b)| (n.as_str(), b.as_slice()));
-                    let template_log =
-                        tpl.map(|(n, _)| n.to_string()).unwrap_or_else(|| "builtin".to_string());
+                    let tpl = s.design.as_template();
+                    let template_log = s.design.log_name().to_string();
                     let result = s
                         .current
                         .as_ref()
@@ -610,8 +646,8 @@ fn app_main(cx: AppContext, ui: AppWindow) {
                     airlock.len()
                 );
                 templates.extend(airlock);
-                let selected = state.borrow().selected_template.as_ref().map(|(n, _)| n.clone());
-                let rows = template_rows(&templates, selected.as_deref());
+                let selected = state.borrow().design.name().to_string();
+                let rows = template_rows(&templates, &selected);
                 let t = ui.global::<Templates>();
                 t.set_rows(ModelRc::new(VecModel::from(rows)));
                 if !airlock_ok {
@@ -632,18 +668,27 @@ fn app_main(cx: AppContext, ui: AppWindow) {
         let state = state.clone();
         ui.global::<Callbacks>().on_pick_template(move |idx| {
             let Some(u) = ui_weak.upgrade() else { return };
-            if idx <= 0 {
-                state.borrow_mut().selected_template = None;
-                u.global::<Templates>().set_selected_name("Satoshi bill".into());
+            let builtins = template::BUILTIN_DESIGNS;
+            if idx >= 0 && (idx as usize) < builtins.len() {
+                // A shipped design needs no read and no validation — its PNG is
+                // in the binary and the test suite composes all three on every
+                // variant — so it applies immediately, with no busy overlay.
+                let design = &builtins[idx as usize];
+                state.borrow_mut().design = Design::Builtin(design);
+                u.global::<Templates>().set_selected_name(design.name.into());
                 u.global::<Ui>().set_error("".into());
-                log::info!("cb: pick-template builtin ok");
+                if design.is_default() {
+                    log::info!("cb: pick-template builtin ok");
+                } else {
+                    log::info!("cb: pick-template preset:{} ok", design.id);
+                }
                 u.global::<Ui>().set_screen(0);
                 return;
             }
             let Some(choice) = state
                 .borrow()
                 .templates
-                .get(idx as usize - 1)
+                .get(idx as usize - builtins.len())
                 .map(|t| (t.name.clone(), t.loc, t.path.clone()))
             else {
                 return;
@@ -672,7 +717,7 @@ fn app_main(cx: AppContext, ui: AppWindow) {
                     Ok(bytes) => {
                         log::info!("cb: pick-template {}:{path} ok", location_name(loc));
                         ui.global::<Templates>().set_selected_name(name.as_str().into());
-                        state.borrow_mut().selected_template = Some((name, bytes));
+                        state.borrow_mut().design = Design::Custom { name, bytes };
                         ui.global::<Ui>().set_screen(0);
                     }
                     Err(e) => {
@@ -998,18 +1043,24 @@ fn scan_templates_at(fs: &Fs, loc: Location) -> Vec<TemplateChoice> {
     found
 }
 
-/// Picker rows: the built-in satoshi design first, then the scanned customs.
-/// `selected` is the display name of the picked custom design (None = built-in).
-fn template_rows(templates: &[TemplateChoice], selected: Option<&str>) -> Vec<TemplateRow> {
-    let mut rows = vec![TemplateRow {
-        name: "Satoshi bill".into(),
-        location: "built-in".into(),
-        selected: selected.is_none(),
-    }];
+/// Picker rows: every shipped design first, in `BUILTIN_DESIGNS` order, then
+/// the scanned customs. `selected` is the display name of the picked design.
+///
+/// Row order is the index contract `on_pick_template` decodes, so the two must
+/// stay in step — both read `BUILTIN_DESIGNS.len()` rather than a literal.
+fn template_rows(templates: &[TemplateChoice], selected: &str) -> Vec<TemplateRow> {
+    let mut rows: Vec<TemplateRow> = template::BUILTIN_DESIGNS
+        .iter()
+        .map(|d| TemplateRow {
+            name: d.name.into(),
+            location: d.blurb.into(),
+            selected: selected == d.name,
+        })
+        .collect();
     rows.extend(templates.iter().map(|t| TemplateRow {
         name: t.name.as_str().into(),
         location: location_title(t.loc).into(),
-        selected: selected == Some(t.name.as_str()),
+        selected: selected == t.name.as_str(),
     }));
     rows
 }

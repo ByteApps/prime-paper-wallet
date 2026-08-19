@@ -12,7 +12,10 @@ use crate::{template, Error, Wallet};
 pub const BILL_WIDTH: u32 = 1843;
 pub const BILL_HEIGHT: u32 = 784;
 
-static TEMPLATE: &[u8] = include_bytes!("../assets/bill_template.png");
+/// The default design's artwork. `pub(crate)` so `template::BUILTIN_DESIGNS`
+/// can point at the same bytes rather than `include_bytes!`-ing a second
+/// copy of a half-megabyte asset into the binary.
+pub(crate) static TEMPLATE: &[u8] = include_bytes!("../assets/bill_template.png");
 
 const BANNER_COLOR: Rgb<u8> = Rgb([253, 229, 167]);
 // Motto/year ink. Was the old artwork's cyan-blue; the replacement bill is
