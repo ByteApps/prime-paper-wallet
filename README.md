@@ -4,7 +4,7 @@
 
 Paper Wallet generates engraved bearer-note gift wallets entirely offline. Each bill carries a brand-new private key born in the device's hardware random-number generator — never derived from your wallet seed, so a gifted bill can never endanger your own funds. The app renders the key onto print-ready artwork with two QR codes, and exports a PNG plus a backup file to wherever you want to print from.
 
-Bills are fully compatible with the [bitcoin-gift-paper-wallet](https://github.com/ObjSal/bitcoin-gift-wallet) web app: recipients sweep with the same guided flow, and givers recover unswept gifts with the same recovery page.
+Bills are fully compatible with the [bitcoin-gift-paper-wallet](https://github.com/ObjSal/bitcoin-gift-paper-wallet) web app: recipients sweep with the same guided flow, and givers recover unswept gifts with the same recovery page.
 
 <p align="center">
   <img src="screenshots/home.png" alt="Home — gift style picker" width="280">
