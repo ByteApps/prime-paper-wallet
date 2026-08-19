@@ -826,16 +826,12 @@ fn save_gift(
         record_json.as_bytes(),
     )?;
 
-    // Durability: unmounting Airlock is the full-flush path the USB
-    // mass-storage flow also uses (the next save/browse remounts); then
-    // flush whichever volumes carry data — User always (metadata + the
-    // airlock image file), USB when it was the target.
+    // Durability: flush whichever volumes carry data — User always
+    // (metadata), USB when it was the target. The old unmount-Airlock
+    // full-flush is gone: `UnmountAirlock` rides the Foundation-only
+    // `MountAirlock` message under SDK 1.0.0 and panics a third-party app
+    // (see ensure_airlock_mounted); the system owns the mount lifecycle.
     let mut flush_fs = fs.clone();
-    if loc == Location::Airlock {
-        if let Err(e) = flush_fs.unmount_airlock() {
-            log::warn!("airlock unmount after export failed: {e:?}");
-        }
-    }
     if loc == Location::Usb {
         if let Err(e) = flush_fs.flush(Location::Usb) {
             log::warn!("flush Usb failed: {e:?}");
@@ -869,12 +865,9 @@ fn write_design_kit(fs: &Fs, loc: Location, dir: &str) -> Result<(), String> {
         template::design_kit_readme().as_bytes(),
     )?;
 
+    // Same durability note as save_gift: no app-side Airlock unmount under
+    // SDK 1.0.0 (Foundation-only message; the send would panic the app).
     let mut flush_fs = fs.clone();
-    if loc == Location::Airlock {
-        if let Err(e) = flush_fs.unmount_airlock() {
-            log::warn!("airlock unmount after kit export failed: {e:?}");
-        }
-    }
     if loc == Location::Usb {
         if let Err(e) = flush_fs.flush(Location::Usb) {
             log::warn!("flush Usb failed: {e:?}");
@@ -886,19 +879,20 @@ fn write_design_kit(fs: &Fs, loc: Location, dir: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Mount Airlock before exporting (idempotent server-side). Nothing mounts
-/// it in the hosted simulator; on a fresh sim the volume is also unformatted,
-/// so a failed mount falls back to format-then-mount — the same recovery the
-/// launcher offers behind its alert, and it only runs when there was no
-/// readable filesystem to lose.
+/// Probe Airlock availability before exporting. Under SDK 1.0.0 the app must
+/// NOT mount/format Airlock itself: `MountAirlock`/`FormatAirlock` are
+/// ungrouped service messages — Foundation-only — and a third-party-signed
+/// app's send is denied at the kernel, which the SDK's `send_blocking_scalar`
+/// unwraps into a process-killing panic (observed 2026-08-18 in the hosted
+/// sim: AccessDenied at server/src/scalar.rs:137, app exits; flagged by
+/// `ui-automation/check-permissions.py`). Mounting is the SYSTEM's job now
+/// (launcher / mass-storage flows on hardware; the sim's Foundation-signed
+/// apps). Here we only check whether the volume is usable, with an ordinary
+/// grantable read — the first call raises the "Airlock files"
+/// grant-on-first-use consent sheet, which is expected.
 fn ensure_airlock_mounted(fs: &Fs) -> Result<(), String> {
-    let mut fs = fs.clone();
-    if fs.mount_airlock().is_ok() {
-        return Ok(());
-    }
-    log::warn!("airlock mount failed — formatting (no readable filesystem)");
-    fs.format_airlock()
-        .and_then(|_| fs.mount_airlock())
+    fs.open_dir("/", Location::Airlock)
+        .map(|_| ())
         .map_err(|e| format!("Airlock unavailable: {}", err_msg(&e)))
 }
 

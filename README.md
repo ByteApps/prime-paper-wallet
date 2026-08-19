@@ -35,6 +35,16 @@ A print-ready 1843×784 PNG. The left QR is the deposit address — load and ver
 - **A gift ledger without secrets** — the saved-gifts list keeps each gift's address, type, and creation date with **no private keys stored**; the backup key is re-derived and shown only on demand, exactly when recovery needs it.
 - **Offline by design** — Prime has no network stack. Sweeping, balance checks, and broadcast intentionally stay in the companion web app.
 
+## Install on your Passport Prime
+
+Grab **`prime-paper-wallet.app`** from the [latest release](https://github.com/ByteApps/prime-paper-wallet/releases/latest), copy it to a USB drive or the Airlock, and install it from **Settings > Apps > Install App** (KeyOS 1.4 or later).
+
+The first ByteApps app you install also needs our publisher certificate trusted once: download [`byteapps.crt`](https://byteapps.com/byteapps.crt) (also attached to every release), copy it over the same way, and add it under **Settings > Apps > Allowed Publishers**. Before trusting it, check that its fingerprint matches the one published at [byteapps.com](https://byteapps.com/#verify):
+
+```
+1bca27c8e765a77fd44922bc058b815b46e627d68f2996e8c38ca6997b6be6f9
+```
+
 ## Get it running
 
 With the Foundation SDK installed, build and launch in the simulator with:
