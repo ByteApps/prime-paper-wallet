@@ -2,7 +2,7 @@
 
 **Bitcoin · Gifts** — turn your Passport Prime into a printing press for bitcoin gifts.
 
-Paper Wallet generates classic "satoshi bill" gift wallets entirely offline. Each bill carries a brand-new private key born in the device's hardware random-number generator — never derived from your wallet seed, so a gifted bill can never endanger your own funds. The app renders the key onto print-ready artwork with two QR codes, and exports a PNG plus a backup file to wherever you want to print from.
+Paper Wallet generates engraved bearer-note gift wallets entirely offline. Each bill carries a brand-new private key born in the device's hardware random-number generator — never derived from your wallet seed, so a gifted bill can never endanger your own funds. The app renders the key onto print-ready artwork with two QR codes, and exports a PNG plus a backup file to wherever you want to print from.
 
 Bills are fully compatible with the [bitcoin-gift-paper-wallet](https://github.com/ObjSal/bitcoin-gift-wallet) web app: recipients sweep with the same guided flow, and givers recover unswept gifts with the same recovery page.
 
@@ -21,7 +21,7 @@ A print-ready 1843×784 PNG. The left QR is the deposit address — load and ver
 <p align="center">
   <img src="screenshots/bill-taproot-backup.png" alt="Taproot + backup bill" width="820">
   <br>
-  <sub>Paper wallet art by <a href="https://www.reddit.com/r/Bitcoin/comments/20rml2/heres_a_paper_wallet_enjoy_or_not_im_bored/">u/CoinCult</a></sub>
+  <sub>Bill artwork drawn for this app — guilloche engraving generated from hypotrochoid curves. Two more designs ship alongside it.</sub>
 </p>
 
 > This sample bill is rendered from **publicly known test keys** — do not send funds to it. The app-screen captures likewise show throwaway simulator keys that never held funds.
@@ -30,7 +30,7 @@ A print-ready 1843×784 PNG. The left QR is the deposit address — load and ver
 
 - **Three gift styles** — **SegWit** (`bc1q…`, sweeps in any wallet), **Taproot** (`bc1p…`, modern and wallet-importable), and the flagship **Taproot + backup**: the recipient sweeps with the key on the bill, while *you* keep a separate backup spend path to recover an unswept gift.
 - **Backup keys that survive anything** — the giver's backup keys are derived from the device master seed. A factory reset plus seed-phrase restore re-derives every backup key; the gift keys themselves stay pure hardware randomness, invisible to anyone restoring the phrase.
-- **Design your own bill** — the satoshi artwork is just the default. Export the built-in design kit, restyle the template in any image editor, and the app validates and renders your custom design with the same engine as the original.
+- **Design your own bill** — the engraved note is just the default; two more designs ship with it, and the whole thing is a template format. Export the built-in design kit, restyle it in any image editor, and the app validates and renders your design through the same engine as the original.
 - **Save it your way** — a full save-as browser across Internal, Airlock, and USB with folder creation, custom filenames, and overwrite protection (a bill names a unique key — the app won't let two collide).
 - **A gift ledger without secrets** — the saved-gifts list keeps each gift's address, type, and creation date with **no private keys stored**; the backup key is re-derived and shown only on demand, exactly when recovery needs it.
 - **Offline by design** — Prime has no network stack. Sweeping, balance checks, and broadcast intentionally stay in the companion web app.

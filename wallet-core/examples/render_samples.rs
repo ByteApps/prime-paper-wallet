@@ -30,5 +30,15 @@ fn main() {
         let custom_path = format!("{out_dir}/sample_custom_{name}.png");
         std::fs::write(&custom_path, custom).unwrap();
         println!("{path} + sample_custom_{name}.png  addr={}", wallet.address);
+
+        // The other shipped designs, through the same custom-template path a
+        // user's own PNG takes.
+        for (design, png) in [
+            ("cypherpunk", &include_bytes!("../assets/templates/cypherpunk.png")[..]),
+            ("ledger", &include_bytes!("../assets/templates/ledger.png")[..]),
+        ] {
+            let bill = template::compose_custom_bill(png, &wallet, ts).unwrap();
+            std::fs::write(format!("{out_dir}/sample_{design}_{name}.png"), bill).unwrap();
+        }
     }
 }

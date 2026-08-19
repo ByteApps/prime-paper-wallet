@@ -15,7 +15,10 @@ pub const BILL_HEIGHT: u32 = 784;
 static TEMPLATE: &[u8] = include_bytes!("../assets/bill_template.png");
 
 const BANNER_COLOR: Rgb<u8> = Rgb([253, 229, 167]);
-const BANNER_TEXT_COLOR: Rgb<u8> = Rgb([0, 161, 210]);
+// Motto/year ink. Was the old artwork's cyan-blue; the replacement bill is
+// engraved in teal and orange, and blue read as a leftover from another
+// design. Changing it moves composed output, so the masters move with it.
+const BANNER_TEXT_COLOR: Rgb<u8> = Rgb([16, 58, 74]);
 pub(crate) const INK: Rgb<u8> = Rgb([30, 30, 30]);
 pub(crate) const BLACK: Rgb<u8> = Rgb([0, 0, 0]);
 pub(crate) const WHITE: Rgb<u8> = Rgb([255, 255, 255]);
