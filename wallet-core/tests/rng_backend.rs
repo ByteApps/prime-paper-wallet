@@ -755,10 +755,21 @@ fn contract_5_real_graph_reaches_only_the_vendored_getrandom_on_device() {
     // cargo metadata ...` with `-Zunstable-options` scoped to its own
     // RUSTFLAGS, rather than exporting that flag for real builds (which
     // `foundation` already does on its own).
-    let sdk_root = std::env::var("FOUNDATION_SDK_ROOT").unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        format!("{home}/.foundation/sdk/current")
-    });
+    // FOUNDATION_SDK_ROOT is only trusted when it actually looks like the SDK
+    // checkout (i.e. it has a flake.nix). Running this test the way the app's
+    // CLAUDE.md documents — `nix develop <sdk> --command cargo test` — puts us
+    // INSIDE the SDK shell, which exports FOUNDATION_SDK_ROOT pointing at the
+    // current PROJECT, not the SDK. Trusting it blindly then shells into a
+    // directory with no flake and the check fails with "is not part of a
+    // flake", which looks like a broken guard rather than a bad path
+    // (2026-08-27).
+    let sdk_root = std::env::var("FOUNDATION_SDK_ROOT")
+        .ok()
+        .filter(|p| std::path::Path::new(p).join("flake.nix").exists())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            format!("{home}/.foundation/sdk/current")
+        });
     let nix = nix_binary();
     let output = std::process::Command::new(&nix)
         .args([

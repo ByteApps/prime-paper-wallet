@@ -826,20 +826,12 @@ fn save_gift(
         record_json.as_bytes(),
     )?;
 
-    // Durability: flush whichever volumes carry data — User always
-    // (metadata), USB when it was the target. The old unmount-Airlock
-    // full-flush is gone: `UnmountAirlock` rides the Foundation-only
-    // `MountAirlock` message under SDK 1.0.0 and panics a third-party app
-    // (see ensure_airlock_mounted); the system owns the mount lifecycle.
-    let mut flush_fs = fs.clone();
-    if loc == Location::Usb {
-        if let Err(e) = flush_fs.flush(Location::Usb) {
-            log::warn!("flush Usb failed: {e:?}");
-        }
-    }
-    if let Err(e) = flush_fs.flush(Location::User) {
-        log::warn!("flush User failed: {e:?}");
-    }
+    // Durability is handled per FILE in write_bytes (see KeyOS#9): the
+    // `Flush(handle)` message flushes the directory entry AND the disk
+    // cache, so it is a strict superset of the volume-level
+    // `FlushFs(location)` this used to call — which was also
+    // Foundation-only, and which the current SDK rejects at BUILD time.
+    // Closing each file flushes again on drop.
 
     Ok((png_path, json_path))
 }
@@ -865,17 +857,8 @@ fn write_design_kit(fs: &Fs, loc: Location, dir: &str) -> Result<(), String> {
         template::design_kit_readme().as_bytes(),
     )?;
 
-    // Same durability note as save_gift: no app-side Airlock unmount under
-    // SDK 1.0.0 (Foundation-only message; the send would panic the app).
-    let mut flush_fs = fs.clone();
-    if loc == Location::Usb {
-        if let Err(e) = flush_fs.flush(Location::Usb) {
-            log::warn!("flush Usb failed: {e:?}");
-        }
-    }
-    if let Err(e) = flush_fs.flush(Location::User) {
-        log::warn!("flush User failed: {e:?}");
-    }
+    // Durability: same per-file barrier as save_gift (write_bytes flushes
+    // each handle; close flushes again).
     Ok(())
 }
 
@@ -897,9 +880,21 @@ fn ensure_airlock_mounted(fs: &Fs) -> Result<(), String> {
 }
 
 fn write_bytes(fs: &Fs, path: &str, loc: Location, bytes: &[u8]) -> Result<(), String> {
-    fs.open_file(path, loc, OpenFlags::CREATE)
-        .and_then(|mut f| f.overwrite(bytes))
-        .map_err(|e| err_msg(&e))
+    use std::io::Write as _;
+    let mut f = fs.open_file(path, loc, OpenFlags::CREATE).map_err(|e| err_msg(&e))?;
+    f.overwrite(bytes).map_err(|e| err_msg(&e))?;
+    // Per-FILE flush — the durability barrier, and a strict superset of the
+    // volume-level one we used to call: `Flush(handle)` does
+    // flush_dir_entry() AND disk.flush(), where `FlushFs(location)` only did
+    // the latter (KeyOS#9). It is also `file-system.write-and-mutate`,
+    // autoAllow, so a third-party app already holds it.
+    //
+    // Closing the file flushes too (Drop -> CloseFile -> dir entry + disk),
+    // so this is belt-and-braces — but explicit, because `File::overwrite()`
+    // carries a MessageAllowed<Flush> bound and does NOT itself flush, which
+    // is exactly the trap that made this app reach for the volume call.
+    f.flush().map_err(|e| format!("flush {path}: {e}"))?;
+    Ok(())
 }
 
 fn load_records(fs: &Fs) -> Vec<(String, GiftRecord)> {

@@ -16,11 +16,15 @@ support-url = "https://byteapps.com"
 
 [permissions]
 template = ["gui-app", "fs-generic", "fs-access"]
-# Nothing mounts Airlock in the hosted simulator (on hardware the launcher /
-# mass-storage flows do), so the app mounts it lazily before exporting a
-# bill; FormatAirlock is the recovery path when the volume was never
-# formatted (fresh sim) — it only runs after a failed mount.
-"os/fs" = ["MountAirlock", "FormatAirlock"]
+# MountAirlock/FormatAirlock are GONE. They are Foundation-only, which the
+# current SDK rejects at build time, and they were already dead here: the
+# code stopped calling them when ensure_airlock_mounted became a plain
+# open_dir() probe — only a comment still referenced them. On hardware the
+# system owns the Airlock mount lifecycle, and the hosted sim has no Airlock
+# at all, so an app-side mount was never the right shape. See KeyOS#9, where
+# Foundation confirmed these abort the app on denial (send_blocking_scalar
+# is try_send(..).unwrap()), which is what stopped the intended
+# mount-else-fall-back-to-Internal path from ever running.
 # Deterministic backup keys for taproot gift wallets: HMAC-derived per-app
 # seed from the wallet master seed (PIN-gated on hardware; kernel-attested
 # app identity). The printed gift key itself is pure TRNG, never seed-derived.
